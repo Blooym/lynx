@@ -40,7 +40,7 @@ COPY --from=setup --chown=lynx /dir /srv/lynx
 
 # Set configuration defaults for container builds.
 ENV LYNX_ADDRESS=0.0.0.0:5621
-ENV LYNX_CONFIG_FILE=/etc/lynx/config.toml
+ENV LYNX_CONFIG=/etc/lynx/config.toml
 ENV RUST_LOG=info
 EXPOSE 5621
 
