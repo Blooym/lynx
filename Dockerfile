@@ -20,9 +20,6 @@ RUN mkdir src \
     && rm src/lib.rs
 
 # Build
-ARG SQLX_OFFLINE=true
-COPY ./migrations ./migrations
-COPY ./.sqlx ./.sqlx
 COPY src ./src
 RUN cargo build --release
 
@@ -44,7 +41,6 @@ COPY --from=setup --chown=lynx /dir /srv/lynx
 # Set configuration defaults for container builds.
 ENV LYNX_ADDRESS=0.0.0.0:5621
 ENV LYNX_CONFIG_FILE=/etc/lynx/config.toml
-ENV DATABASE_URL=sqlite:///srv/lynx/data.db
 ENV RUST_LOG=info
 EXPOSE 5621
 
