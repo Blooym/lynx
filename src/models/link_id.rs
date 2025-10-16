@@ -3,10 +3,10 @@ use serde::Deserialize;
 use tracing::warn;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct LinkId(String);
+pub struct LinkId(Box<str>);
 
 impl LinkId {
-    pub fn new<S: Into<String>>(id: S) -> Result<Self> {
+    pub fn new<I: Into<Box<str>>>(id: I) -> Result<Self> {
         const RESERVED_IDS: [&str; 1] = ["api"];
         const FORBIDDEN_CHARS: [char; 1] = ['\\'];
         let id = id.into();
@@ -28,7 +28,7 @@ impl LinkId {
         }
 
         // Validation: links cannot use reserved IDs
-        if RESERVED_IDS.contains(&id.as_str()) {
+        if RESERVED_IDS.contains(&&*id) {
             bail!("link ID reserved for internal use: '{id}'");
         }
 
