@@ -1,6 +1,5 @@
 use anyhow::{Result, bail};
 use serde::Deserialize;
-use tracing::warn;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LinkId(Box<str>);
@@ -23,7 +22,7 @@ impl LinkId {
             }
             // Validation: links cannot contain forbidden characters
             if FORBIDDEN_CHARS.contains(&chr) {
-                bail!("link ID contains one (or more) forbidden characters: {FORBIDDEN_CHARS:?}");
+                bail!("link ID contains one or more forbidden characters: {FORBIDDEN_CHARS:?}");
             }
         }
 
@@ -35,13 +34,6 @@ impl LinkId {
         // Validation: links cannot start or end with a /
         if id.starts_with('/') || id.ends_with('/') {
             bail!("link ID starts or ends with a '/'")
-        }
-
-        // TODO: Remove when confirmed stable with no issues.
-        if id.contains('/') {
-            warn!(
-                "link ID '{id}': IDs containing a '/' are an experimental feature and may break in future updates"
-            );
         }
 
         Ok(LinkId(id))
@@ -80,7 +72,7 @@ mod tests {
         // Valid cases
         assert!(LinkId::new("valid-id").is_ok());
         assert!(LinkId::new("with_underscore").is_ok());
-        assert!(LinkId::new("with/slash").is_ok()); // experimental
+        assert!(LinkId::new("with/slash").is_ok());
 
         // Invalid cases
         assert!(LinkId::new("").is_err()); // empty
