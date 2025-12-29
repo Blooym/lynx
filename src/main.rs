@@ -39,9 +39,9 @@ struct Arguments {
     )]
     address: SocketAddr,
 
-    /// Path to the configuration file. This file will be watched for changes and the configuration will be live-reloaded automatically.
-    #[clap(short = 'c', long = "config", env = "LYNX_CONFIG")]
-    config_path: PathBuf,
+    /// Path to the configuration file. Changes will automatically trigger a reload.
+    #[clap(short = 'c', long = "config", env = "LYNX_CONFIG", value_parser = validate_output_file)]
+    config_file: PathBuf,
 }
 
 #[derive(Clone)]
@@ -59,12 +59,13 @@ async fn main() -> Result<()> {
 
     // Load configuration file and create a watcher for changes.
     let lynx_config = Arc::new(RwLock::new(
-        LynxConfiguration::from_path(&args.config_path)
+        LynxConfiguration::from_path(&args.config_file)
             .context("your configuration file is invalid. see inner error for details")?,
     ));
+
     let mut watcher = {
         let loaded_config = Arc::clone(&lynx_config);
-        let lynx_config_path = args.config_path.clone();
+        let lynx_config_path = args.config_file.clone();
         notify::recommended_watcher(move |result: Result<Event, notify::Error>| {
             let Ok(event) = result else {
                 error!(
@@ -92,7 +93,7 @@ async fn main() -> Result<()> {
         })?
     };
     watcher.watch(
-        &args.config_path.canonicalize()?,
+        &args.config_file.canonicalize()?,
         notify::RecursiveMode::NonRecursive,
     )?;
 
@@ -127,9 +128,9 @@ async fn main() -> Result<()> {
     // Start server.
     let tcp_listener = TcpListener::bind(&args.address).await?;
     info!(
-        "Starting Lynx server\n- address: http://{}\n- config {}",
+        "Starting Lynx server on http://{} with configuration from {}",
         args.address,
-        args.config_path.display(),
+        args.config_file.display(),
     );
     axum::serve(tcp_listener, router)
         .with_graceful_shutdown(shutdown_signal())
@@ -161,4 +162,14 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
+
+fn validate_output_file(s: &str) -> Result<PathBuf, String> {
+    if s.ends_with('/') || s.ends_with('\\') {
+        return Err(format!(
+            "the path at '{}' must be a file, not a directory.",
+            s
+        ));
+    }
+    Ok(PathBuf::from(s))
 }
