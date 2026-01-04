@@ -3,7 +3,6 @@
 # ----------
 FROM alpine:latest AS setup
 RUN adduser -S -s /bin/false -D lynx
-RUN mkdir /dir
 
 # -----------
 #    BUILD
@@ -30,13 +29,9 @@ FROM scratch
 WORKDIR /opt
 
 COPY --from=build /build/target/release/lynx /usr/bin/lynx
-
-# Setup deployment image.
-COPY --from=setup /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=setup /etc/passwd /etc/passwd
 COPY --from=setup /bin/false /bin/false
 USER lynx
-COPY --from=setup --chown=lynx /dir /srv/lynx
 
 # Set configuration defaults for container builds.
 ENV LYNX_ADDRESS=0.0.0.0:5621
