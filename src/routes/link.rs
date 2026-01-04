@@ -4,56 +4,58 @@ use crate::{
 };
 use anyhow::Result;
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::State,
+    http::{StatusCode, Uri},
     response::Redirect,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, error};
+use tracing::debug;
 
 pub async fn get_link_redirect_handler(
     State(state): State<AppState>,
-    Path(link_id): Path<LinkId>,
+    link_id: LinkId,
+    uri: Uri,
 ) -> Result<Redirect, (StatusCode, &'static str)> {
     let config = state.config.read().await;
-    let Some(link) = config.links().get(&link_id) else {
-        debug!("Link ID '{}' not found in configuration", link_id);
-        return Err((
-            StatusCode::NOT_FOUND,
-            "This link does not exist or is no longer available.",
-        ));
+    let redirect_url = match config.links().get(&link_id) {
+        Some(link) if link_valid(&link_id, link).await => link
+            .make_redirect_for_path(&link_id, uri.path())
+            .map_err(|_err| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal server error occurred.",
+                )
+            })?,
+        _ => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                "This link does not exist or is no longer available.",
+            ));
+        }
     };
-    if !link_valid(&link_id, link).await.map_err(|err| {
-        error!("Failed to validate Link ID '{}': {}", link_id, err);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Something went wrong, please try again later.",
-        )
-    })? {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "This link does not exist or is no longer available.",
-        ));
-    }
-    debug!("Redirecting Link ID '{}' -> '{}'", link_id, link.redirect,);
-    Ok(Redirect::temporary(link.redirect.as_str()))
+    debug!("Redirecting Link ID '{}' -> '{}'", link_id, redirect_url);
+    Ok(Redirect::temporary(redirect_url.as_str()))
 }
 
-async fn link_valid(link_id: &str, link_data: &Link) -> Result<bool> {
+async fn link_valid(link_id: &str, link_data: &Link) -> bool {
     if link_data.disabled {
         debug!("Link ID '{}' is disabled", link_id);
-        return Ok(false);
+        return false;
     }
 
     if let Some(invalid_after) = link_data.invalid_after
-        && invalid_after < SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+        && invalid_after
+            < SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Clock may have gone backwards")
+                .as_secs()
     {
         debug!(
             "Link ID '{}' has expired - invalid after {}",
             link_id, invalid_after
         );
-        return Ok(false);
+        return false;
     }
 
-    Ok(true)
+    true
 }

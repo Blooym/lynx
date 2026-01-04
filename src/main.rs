@@ -27,6 +27,16 @@ use tower_http::{
 use tracing::{Level, error, info, trace};
 use tracing_subscriber::EnvFilter;
 
+fn validate_output_file(s: &str) -> Result<PathBuf, String> {
+    if s.ends_with('/') || s.ends_with('\\') {
+        return Err(format!(
+            "the path at '{}' must be a file, not a directory.",
+            s
+        ));
+    }
+    Ok(PathBuf::from(s))
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Arguments {
@@ -59,10 +69,9 @@ async fn main() -> Result<()> {
 
     // Load configuration file and create a watcher for changes.
     let lynx_config = Arc::new(RwLock::new(
-        LynxConfiguration::from_path(&args.config_file)
+        LynxConfiguration::load_from_path(&args.config_file)
             .context("your configuration file is invalid. see inner error for details")?,
     ));
-
     let mut watcher = {
         let loaded_config = Arc::clone(&lynx_config);
         let lynx_config_path = args.config_file.clone();
@@ -77,7 +86,7 @@ async fn main() -> Result<()> {
             trace!("filesystem event: {:?}", event);
             if event.kind.is_modify() || event.kind.is_create() {
                 info!("change to the configuration detected - attempting reload");
-                match LynxConfiguration::from_path(&lynx_config_path) {
+                match LynxConfiguration::load_from_path(&lynx_config_path) {
                     Ok(config) => {
                         *loaded_config.blocking_write() = config;
                         info!("successfully reloaded configuration file");
@@ -98,9 +107,6 @@ async fn main() -> Result<()> {
     )?;
 
     // Prepare server.
-    let state = AppState {
-        config: lynx_config,
-    };
     let router = Router::new()
         .route("/", get(index_handler))
         .route("/{*link_id}", get(get_link_redirect_handler))
@@ -123,7 +129,9 @@ async fn main() -> Result<()> {
                 res
             },
         ))
-        .with_state(state);
+        .with_state(AppState {
+            config: lynx_config,
+        });
 
     // Start server.
     let tcp_listener = TcpListener::bind(&args.address).await?;
@@ -135,7 +143,6 @@ async fn main() -> Result<()> {
     axum::serve(tcp_listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
-
     Ok(())
 }
 
@@ -162,14 +169,4 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-}
-
-fn validate_output_file(s: &str) -> Result<PathBuf, String> {
-    if s.ends_with('/') || s.ends_with('\\') {
-        return Err(format!(
-            "the path at '{}' must be a file, not a directory.",
-            s
-        ));
-    }
-    Ok(PathBuf::from(s))
 }
